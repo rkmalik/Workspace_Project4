@@ -2,7 +2,7 @@ package common
 
 import java.util.ArrayList
 
-case class TweetTransmit (clientid: Int, msg: String)
+case class TweetTransmit (clientid: Int, buffer: String)
 case class UserData (clientid: Int)
 case class Acknowledge (msg: String)
 case class 	Message (msg : String)

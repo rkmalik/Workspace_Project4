@@ -5,85 +5,93 @@ import java.security.MessageDigest
 import common._
 import scala.io.Source
 import java.io._
+import scala.concurrent.duration._
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 
-case class SendTweet (msg: String, id : Int,  remote : ActorRef) 
+
+case class TweetRef (remote : ActorRef) 
 
     
 object Client{
   
   def main(args: Array[String]){
-	  println("****************************************************************************************")
 	   
-	   implicit val system = ActorSystem("LocalSystem")
-	   val bossActor = system.actorOf(Props(new ClientMaster (args(0))), name = "ClientMaster")
-	   
+	   implicit val system = ActorSystem("TwitterClient")
+	   val bossActor = system.actorOf(Props(new TwitterClientMaster (args(0), system)), name = "TwitterClientMaster")	   
 	   //below line for hard coded IP address
-	   //val bossActor = system.actorOf(Props[ClientMaster], name = "ClientMaster")
-	   
+	   //val bossActor = system.actorOf(Props[TwitterClientMaster], name = "TwitterClientMaster")	   
 	  System.setProperty("java.net.preferIPv4Stack", "true")
 	   println("****************************************************************************************")
-	   bossActor  ! Message ("Connected")
+	   
+	    bossActor  ! "Connected"
    }
 }
 
-class ClientMaster (ip: String) extends Actor {
-//class ClientMaster extends Actor {
+//class TwitterClientMaster (ip: String, system: ActorSystem) extends Actor {
+//class TwitterClientMaster extends Actor {
+class TwitterClientMaster (ip: String, system: ActorSystem) extends Actor {  
+	val remote = context.actorFor("akka.tcp://TwitterServer@"+ip+":5570/user/TwitterRouter")
+	//val TwitterClientWorker = context.actorOf(Props(new TwitterClientWorker (1)).withRouter(RoundRobinRouter(100000)), name = "TwitterClientWorkers")
+	//var counter = 0 
+	
+	var clientcount = 10000
+	var i = 0	
+	val tweetclients = new ArrayBuffer[ActorRef]()
+    for(i<-0 to clientcount)
+  	{
+  		tweetclients += system.actorOf(Props(new TwitterClientWorker (i)), name = "clientworker"+i)
+  	}
+	
+	
+	val b = System.currentTimeMillis;
+	
 
-	val remote = context.actorFor("akka.tcp://WorkerSystem@"+ip+":5570/user/ServerMaster")
-	//below line for hard coded IP
-    //val remote = context.actorSelection("akka.tcp://WorkerSystem@192.168.0.29:5570/user/ServerMaster")
-	val clientworker = context.actorOf(Props[ClientWorker].withRouter(RoundRobinRouter(4)), name = "ClientWorkers")
-	var counter = 0 
-	var i = 0
-  
+	//system.scheduler.schedule(0 milliseconds,10 milliseconds,TwitterClientWorker(i),SendTweet ("ready", i, remote))
 
   def receive = {
 	  
-	case Message (msg) => 
-	  	println (msg)
-	  		
-	  	var i = 0;
-	  	if (msg == "ready"){
-	  	  
-	  	  for ( i <- 0 until 4) {
-	  	    
-	  	    clientworker ! SendTweet ("ready", i, remote)
-	  	    
-	  	  }	  	  
-	  	  
-	  	}	  		 
-	  	else 
-	  		remote ! Message (msg)    
+	  case msg: String =>
+	 
+	    // If I got the message as connected from main then send this to the Twitter Server 
+	    // and wait for the ready message
+	    //println (msg)
+	    if (msg == "Connected") {
+	     
+	      	     remote !  msg
+	      
+	     // Else if I have got the ready message from the remote server then I will generate the threads 
+	    } else if (msg == "ready") {
+	      println ("received ready")
+	      
+	    	while(true)
+			{
+				var i = Random.nextInt(clientcount)
+				tweetclients(i) ! TweetRef (sender)
+			}
+	      
+	    }
+	     
 	        
   }
 }
 
-class ClientWorker extends Actor {  
-  
-  var clientid = 1
-  var buffer = Array [Char] (140)
-  var bufsize:Int = 140
-  
- def receive = {
-    
-    
-    case SendTweet (msg, i, remote) =>
+class TwitterClientWorker (id: Int)extends Actor {    
+	var clientid = id
+	//var buffer = Array [Char] (140)  
+	var tweetMsg = new StringBuilder   
+	var bufsize:Int = 140
+	
+ def receive = {       
 	  
-      clientid = i
-	  println ("In Acknowledge")
-	  println (msg)
-	  if (msg == "ready"){
+    case TweetRef (sender) =>  
 	    
-	  	//var buffer = Array [Char] (140);	    
-		//Source.fromFile("twitter.txt", bufsize).foreach{ 
-		  for (buffer <- Source.fromFile("twitter.txt").getLines() ){
-			remote ! TweetTransmit (clientid, buffer)
-		}
-	  }
+		  //for (tweetMsg <- Source.fromFile("twitter.txt").getLines() ){
+			//sender ! TweetTransmit (clientid, tweetMsg)
+		//}
+
       
-      remote ! Message ("done")
-      
-  }
-  
+      	sender ! TweetTransmit (clientid, "Hello Twitter")
+  }  
 }
