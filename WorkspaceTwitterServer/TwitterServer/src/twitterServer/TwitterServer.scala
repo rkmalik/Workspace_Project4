@@ -1,232 +1,204 @@
 package twitterServer
 
-//package server
+//package twitterServer
 
 import akka.actor._
 import akka.routing._
 import java.security.MessageDigest
 import scala.concurrent.duration._
-//import messages._
 import scala.math._
 import java.io._
 import java.io.PrintStream
 import java.io.FileOutputStream
 import scala.io.Source
 import common._
+import collection.mutable
+import collection.mutable.HashMap
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.StringBuilder
+import java.util.Hashtable
 
-case class DurationInfo(totalbitcoins : Int, duration : Duration )
-case class 	GenerateTweets(start : Int, nrofElements: Int)
-case object MineTweets
 
- //case class TweetTransmit (msg: String)
- //case class Acknowledge(msg: String)
+
+
+case class Tweeting (clientid : Int,  msg: String, clientsender: ActorRef)
 
 object TwitterServer{
-    //System.setOut(new PrintStream(new java.io.FileOutputStream("TweetOutput.txt")))
-    def main(args: Array[String]){
-      //val writer = new PrintWriter(new File("TwitterOP.txt" ))
-
-      //writer.write("Hello there!my first tweet")
-      //writer.close()
-  	 // val numOfZeros = args (0).toInt
-      val numOfTweets=args(0).toInt
-	  val pattern = new BuildPattern
-	  val system = ActorSystem("WorkerSystem")
-	  // val timeractor = system.actorOf(Props[TimerActor], name="TimerActor")
-	  //val ServerMaster = system.actorOf(Props(new ServerMaster(pattern.getPattern(numOfZeros), timeractor)), name = "ServerMaster")
-	 //original line below from bitcoin
-	  //val ServerMaster = system.actorOf(Props(new ServerMaster(pattern.getPattern(numOfZeros))), name = "ServerMaster")
-	   val ServerMaster = system.actorOf(Props(new ServerMaster(pattern.getPattern(numOfTweets))), name = "ServerMaster")
-	  System.setProperty("java.net.preferIPv4Stack", "true")
-	 /*
-	  ServerMaster ! MineBitcoins
-	  ServerMaster ! MineBitcoins
-	  ServerMaster ! MineBitcoins
-	  ServerMaster ! MineBitcoins
-	  */
-	  ServerMaster ! MineTweets
-	  ServerMaster ! MineTweets
-	  ServerMaster ! MineTweets
-	  ServerMaster ! MineTweets
-
-  }
-}
-
-class BuildPattern {
+  sealed trait TraitMessage
+  case object Stop extends TraitMessage
   
-  def getPattern (numOfZeros : Int) : StringBuffer = {
-    
-    // Develop starting pattern 
-	  val i = 0
-	  //var pattern = new StringBuffer ()
-	  var pattern = new StringBuffer ()
-
-	  for (i <- 0 until numOfZeros) {
-		  pattern.append("0".toString ())
-	  }
-	  pattern
-  }  
-}
-
-// This class takes the number or zeros to be mined 
-class ServerMaster (pattern: StringBuffer) extends Actor {
-  
-
-	var start = 0
-	var timerstart: Long=System.currentTimeMillis
-	var timerend : Long = 0
-	var duration : Long = 0
-	var nrOfElements = 20000
-	var remoteElements = nrOfElements *4
-	//var totalbitcoins = 0
-	var totaltweets = 0
-	val serverworker = context.actorOf(Props (new ServerWorker).withRouter(RoundRobinRouter(4)), name = "LocalWorkers")
-	 
-	def receive = {
-		
-	  case msg =>
-	    if(msg == "Connected"){
-	      println (msg)
-	      //sender ! Acknowledge ("")
-	      sender ! "ready"
-	      
-	}else
-	{
-	  println(msg)
-	} 
-	  case ServerWorkerResp (result, msg) => 		  	
-
-			if (result> 0) {
-				println ("")
-				println ("Number of Bit Coins Mined by server workers  " + result)
-				println(s"Server Workers output Bit Coins : '$msg'")			  
-			}
-			
-			//totalbitcoins = totalbitcoins + result
-			totaltweets = totaltweets + result
-			/*
-			if (totalbitcoins < 100) {			  
-				
-				sender ! MineBitcoinsWithinRange(start, nrOfElements, pattern)
-				start = start + nrOfElements				
-			} else {
-			  println ("")
-			  println ("Server Master Minded the Total " + totalbitcoins)
-			  println ("STOP")
-			}
-			* 
-			*/
-			if(totaltweets < 100){
-			  sender ! GenerateTweets(start, nrOfElements)
-			  start = start + nrOfElements
-			  }else{
-			    
-			  }
-		
-		case ClientToServerResp (resultcount, msg) =>
+  	//System.setOut(new PrintStream(new java.io.FileOutputStream("TweetOutput.txt")))
+	val corecount =  Runtime.getRuntime().availableProcessors()
 	
-		  	if (resultcount> 0) {
-		  		println ("")
-				println ("Number of Bit Coins Mined by Remote Client Workers  " + resultcount)
-				println(s"Remote Client Workers output Bit Coins : '$msg'")		  
-			}
+    def main(args: Array[String]){
+      //val numOfTweets=args(0).toInt
+	  val system = ActorSystem("TwitterServer")
+	  
+	  println ("Total Cores in this machin is " + corecount)
+	  val serverworker = system.actorOf(Props (new TwitterServerWorker /*(totaltweets, tweetdata) */).withRouter(RoundRobinRouter(corecount)), name = "TwitterSeverMaster")  
+	  
+	  val router = system.actorOf(Props(new TwitterRouter(serverworker)), name = "TwitterRouter")
+	  System.setProperty("java.net.preferIPv4Stack", "true")
+	  
+	  
+  }		
+  
+  
+  class TwitterServerWorker /*(totaltweets: Int , tweetdata:ArrayBuffer [ArrayBuffer[String]])*/ extends Actor {
 
-			//totalbitcoins = totalbitcoins + resultcount
-			
-			/*
-			if (totalbitcoins < 100) {			  
+	def receive = {      
+      
+	  case Tweeting(clientid,message, sender) =>
 
-				sender ! ServerToClientReq (start, remoteElements, pattern)
-				start = start + remoteElements
-				
-			} else {
-			  
-			  println ("STOP")
-			  timerend = System.currentTimeMillis
-			  duration = timerend - timerstart 
-			  //timeractor ! DurationInfo(totalbitcoins, duration)
-			  println ("Total Time taken to mine " + totalbitcoins + " = " + duration + " MiliSeconds.")
-			}
-			*/
-	/*  
-		case MineBitcoins =>
-			serverworker ! MineBitcoinsWithinRange(start, nrOfElements, pattern)
-	        start = start + nrOfElements
-		*/
-		case MineTweets =>
-		    serverworker ! GenerateTweets(start,nrOfElements)
-		case ClientToServer(msg) =>
+	    // We will be handling the server side data on the later stage
+	    // As of now we are just handling the numbe of tweets
+	    /*var tweetcount = 0
+	    var tweetbuf = new ArrayBuffer [StringBuffer]
+	    tweetbuf = hashmap.getOrElse(clientid, tweetbuf)
+	    var buf = new StringBuffer (message)
+	    tweetbuf += buf
+	    hashmap.put(clientid, tweetbuf)
+	    println("clientid:" +clientid)
+	    println("mesages:" +message)
+	    tweetcount = hashint.getOrElse(clientid, tweetcount)
+	    hashint.put(clientid, tweetcount)
+	     */
+	     
+	    	println ("Client id : " + clientid + "  Tweet : " + message)
+	  		/*tweetdata (clientid) += message
+	  		if (tweetcount >= 100) {	  		  
+	  		  for (i <- 0 until 100){
+	  		    var it2 = 0
+	  		    while (it2 <  tweetdata(i).length) {
+	  		      
+	  		      println ((tweetdata (i))(it2))
+	  		      
+	  		    }	  		    
+	  		    
+	  		  }  		  
+	  		  //context.stop(self)   		  
+	  		}*/
+	  		
+	  
 
-			println (s"Message From Client : '$msg'")
-
-			sender ! ServerToClientReq (start, remoteElements, pattern)
-			start = start + remoteElements
-			
-		case msg =>
-		   println(msg)
-			
+	    /*case MessageFromServer (msg, clientsender) =>
+	      val msgcount = 0 
+	      println ("In Server Woker " + msg)
+	      if(msg == "Connected")
+	      {
+	    	   println ("In Server Woker " + msg)
+	    	   //sender ! Acknowledge ("")
+	    	  println("sending ready")	
+	    	   clientsender ! "ready"
+		      if(msgcount==10)
+	          {
+	             println("number of tweets is 10 now")
+	          }
+	       }else if (msg == "done"){
+	          println("got the tweets as per clientid:")
+	    	   for ((k,v) <- hashmap) {
+	    		   var tweetcount = 0
+	    		   tweetcount = hashint.getOrElse(k, tweetcount)
+	    		   println ("Total Number of Tweets for " + tweetcount + "  For client  " + k)
+	    		   
+	    		   var buff  = new StringBuffer 
+	    		   var it = hashmap.iterator 
+	    		   
+	    		   it.foreach{
+	    		     
+	    		     println 
+	    		     
+	    		   }
+	    		   
+	    	   }
+	       }*/
+		
   	}
 }
 
-/*
-class TimerActor extends Actor {
-	def receive=
-	{
-		case DurationInfo(message,duration) =>
-		println(msg)
-		println(duration)
-	}
-}*/
-
-// This the worker actor takes the number of Zeros to be found in the given range and return the 
-// output payload of the mined bit coins
-class ServerWorker extends Actor {
   
-	def receive = {
-    	case MineBitcoinsWithinRange (start, nrOfElements, pattern) =>
-    	  
-    		//val hg = new HashGenerator ()
-
-    		//var out : Outputdetail = hg.GetHash(start, start + nrOfElements, pattern)
-    		
-    		//sender ! ServerWorkerResp (out.result , out.bitCoins)   	
-  }  
-}
-
-
-
-
-/*
-class HashGenerator { 
+  class TwitterRouter (TwitterServerWorker:ActorRef) extends Actor {
+		  
+			var timerstart: Long=System.currentTimeMillis
+			var timerend : Long = 0
+			var duration : Long = 0
+			var nrOfTweets= 0
+			
+			
+			  def receive = {
+			    
+			  
+			  case Stop =>
+			    println ("Total Numbe of Tweets = " + nrOfTweets + "  " + duration + " MiliSeconds.")
+			    println ("Closing the Connection")
+			    context.stop(self)
+			  
+			    case msg : String => 
+			    
+			      println ("In Router " + msg)
+			      sender ! "ready"
+			      
+			      // No futher call from the server master to client		      
+			      //TwitterServerWorker ! (sender, msg)
+			      //TwitterServerWorker ! TweetTransmit(clientid,message, sender)
+			      
+			   
+			    case TweetTransmit(clientid, message) =>
+			      //println (clientid + " " + message)
+			      // Pass this message to the worker.
+			     nrOfTweets += 1 
+			     timerend = System.currentTimeMillis
+			     duration = timerend - timerstart 
+				  if (duration >= 30000) {
+					  self ! Stop
+				  } else 
+					  TwitterServerWorker ! Tweeting(clientid, message, sender)
+			  }
+			  
+			  
+		  
+	      }	  
 	
-	def GetHash(countStart: Int, countEnd : Int, pattern : StringBuffer) : Outputdetail = {
-    
-		val md = MessageDigest.getInstance("SHA-256");
-		var i = 0
-		var outputBitCoin: String = ""
-		var outputcount = 0
-  	    
-  	  	for (i <- countStart until countEnd){  	    	
-  	  		
-  	  		val mdbytes = md.digest(("rkmalik" + i.toString()).getBytes);
-  	  		val sb = new StringBuffer();
-  	  		sb.append(HexOfBuffer(mdbytes)) 	  		
-  	  		
-  	  		if (sb.indexOf(pattern.toString()) == 0){
-  	  		  
-  	  			outputBitCoin = outputBitCoin  + "\n" + ("rkmalik" + i.toString()) + "\t" + sb.toString(); 
-  	  			outputcount = outputcount + 1
-  	  		}	  			
-  	  	}		
+	}
+
+/*
+class TwitterRouter (TwitterServerWorker:ActorRef) extends Actor {
+	  
+		var timerstart: Long=System.currentTimeMillis
+		var timerend : Long = 0
+		var duration : Long = 0
+		var nrOfTweets= 0
 		
-		// Output the Payload of Bit Coins mined to 
-		Outputdetail (outputcount, outputBitCoin)
-  }
   
-  // Definition of new Method HexOfBuffer X is used to get hex code in capital letters while 
-  // x (small x is used to get the hex value in small letters
-  def HexOfBuffer(buf: Array[Byte]): String = {
-    buf.map("%02x" format _).mkString
-  }  
-}
+		  def receive = {
+		    
+		  
+		  case Stop =>
+		    context.stop(self)
+		  
+		    case msg : String => 
+		    
+		      println ("In Router " + msg)
+		      sender ! "ready"
+		      
+		      // No futher call from the server master to client		      
+		      //TwitterServerWorker ! (sender, msg)
+		      //TwitterServerWorker ! TweetTransmit(clientid,message, sender)
+		      
+		   
+		    case TweetTransmit(clientid, message) =>
+		      //println (clientid + " " + message)
+		      // Pass this message to the worker.
+		      nrOfTweets++
+		      timerend = System.currentTimeMillis
+			  duration = timerend - timerstart 
+			  println ("Total Numbe of Tweet = " + nrOfTweets + "  " + duration + " MiliSeconds.")
+		      TwitterServerWorker ! Tweeting(clientid, message, sender)
+		  }
+		  
+		  
+	  
+      }	  
 */
+
